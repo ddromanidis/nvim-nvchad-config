@@ -169,35 +169,68 @@ return {
   },
 
   {
-    "nvim-treesitter/nvim-treesitter",
-    dependencies = "nvim-treesitter/nvim-treesitter-textobjects",
-    opts = function(_, opts)
-      opts.textobjects = {
+    "nvim-treesitter/nvim-treesitter-textobjects",
+    branch = "main",
+    lazy = false,
+    config = function()
+      local textobjects = require("nvim-treesitter-textobjects")
+      -- A. Setup: Configure behavior (lookahead, etc)
+      textobjects.setup({
         select = {
-          enable = true,
           lookahead = true,
-          keymaps = {
-            ["af"] = "@function.outer", ["if"] = "@function.inner",
-            ["ac"] = "@class.outer",    ["ic"] = "@class.inner",
-            ["aa"] = "@parameter.outer",["ia"] = "@parameter.inner",
-            ["al"] = "@loop.outer",     ["il"] = "@loop.inner",
+          selection_modes = {
+            ['@parameter.outer'] = 'v', -- charwise
+            ['@function.outer'] = 'V',  -- linewise
+            ['@class.outer'] = '<c-v>', -- blockwise
           },
         },
         move = {
-          enable = true,
-          set_jumps = true,
-          goto_next_start = { ["]m"] = "@function.outer", ["]c"] = "@class.outer" },
-          goto_next_end = { ["]M"] = "@function.outer", ["]C"] = "@class.outer" },
-          goto_previous_start = { ["[m"] = "@function.outer", ["[c"] = "@class.outer" },
-          goto_previous_end = { ["[M"] = "@function.outer", ["[C"] = "@class.outer" },
+          set_jumps = true, -- Add to jumplist
         },
-        swap = {
-          enable = true,
-          swap_next = { ["<leader>pa"] = "@parameter.inner" },
-          swap_previous = { ["<leader>pA"] = "@parameter.inner" },
-        },
-      }
-      return opts
+      })
+
+      -- B. Keymaps: Manually define them now
+      local select = require("nvim-treesitter-textobjects.select")
+      local move = require("nvim-treesitter-textobjects.move")
+      local swap = require("nvim-treesitter-textobjects.swap")
+      local ts_repeat = require("nvim-treesitter-textobjects.repeatable_move")
+
+      -- Helper to shorten lines
+      local map = vim.keymap.set
+
+      -- --- SELECT ---
+      -- Functions
+      map({ "x", "o" }, "af", function() select.select_textobject("@function.outer", "textobjects") end)
+      map({ "x", "o" }, "if", function() select.select_textobject("@function.inner", "textobjects") end)
+      -- Classes
+      map({ "x", "o" }, "ac", function() select.select_textobject("@class.outer", "textobjects") end)
+      map({ "x", "o" }, "ic", function() select.select_textobject("@class.inner", "textobjects") end)
+      -- Parameters (Arguments)
+      map({ "x", "o" }, "aa", function() select.select_textobject("@parameter.outer", "textobjects") end)
+      map({ "x", "o" }, "ia", function() select.select_textobject("@parameter.inner", "textobjects") end)
+
+      -- --- SWAP ---
+      map("n", "<leader>a", function() swap.swap_next("@parameter.inner") end)
+      map("n", "<leader>A", function() swap.swap_previous("@parameter.inner") end)
+
+      -- --- MOVE ---
+      -- Jump to next function start/end
+      map({ "n", "x", "o" }, "]m", function() move.goto_next_start("@function.outer", "textobjects") end)
+      map({ "n", "x", "o" }, "]M", function() move.goto_next_end("@function.outer", "textobjects") end)
+      -- Jump to prev function start/end
+      map({ "n", "x", "o" }, "[m", function() move.goto_previous_start("@function.outer", "textobjects") end)
+      map({ "n", "x", "o" }, "[M", function() move.goto_previous_end("@function.outer", "textobjects") end)
+
+      -- --- REPEATABLE MOVES (; and ,) ---
+      -- This allows you to use ; and , to repeat the last textobject move
+      map({ "n", "x", "o" }, ";", ts_repeat.repeat_last_move_next)
+      map({ "n", "x", "o" }, ",", ts_repeat.repeat_last_move_previous)
+
+      -- Optional: Make builtin f, F, t, T also repeatable with ; and ,
+      map({ "n", "x", "o" }, "f", ts_repeat.builtin_f_expr, { expr = true })
+      map({ "n", "x", "o" }, "F", ts_repeat.builtin_F_expr, { expr = true })
+      map({ "n", "x", "o" }, "t", ts_repeat.builtin_t_expr, { expr = true })
+      map({ "n", "x", "o" }, "T", ts_repeat.builtin_T_expr, { expr = true })
     end,
   },
 
@@ -358,6 +391,121 @@ return {
         git_ignored = false,   -- false = Show files in .gitignore
       },
     },
+  },
+
+  {
+    "nvim-neotest/neotest",
+    dependencies = {
+      "nvim-neotest/nvim-nio",
+      "nvim-lua/plenary.nvim",
+      "antoinemadec/FixCursorHold.nvim",
+      "nvim-treesitter/nvim-treesitter",
+      -- The Go Adapter
+      {
+        "fredrikaverpil/neotest-golang",
+        version = "*",
+      },
+      -- Debugging Support
+      "mfussenegger/nvim-dap",
+      "leoluz/nvim-dap-go",
+    },
+    config = function()
+      local neotest = require("neotest")
+      local neotest_golang = require("neotest-golang")
+
+      -- Setup the Debugger first
+      require("dap-go").setup()
+
+      neotest.setup({
+        adapters = {
+          neotest_golang({
+            -- CRITICAL FIX: Use standard "go" command to avoid the JSON error
+            runner = "go",
+            go_test_args = {
+              "-v",
+              "-race",
+              -- "-count=1",
+              -- "-timeout=60s",
+              -- "--jsonfile=" .. report_path 
+            },
+            -- Enable Debugging (allows you to use <leader>td)
+            dap_go_enabled = true,
+          }),
+        },
+
+        -- UI Configuration
+        output = {
+          open_on_run = true, -- Auto-open output on failure
+          enter = true,       -- Auto-focus the output window
+        },
+        status = {
+          virtual_text = true, -- Show "Failed" text next to code
+          signs = true,        -- Show Red/Green dots in gutter
+        },
+      })
+    end,
+    -- Keymaps for TDD
+    keys = {
+      { "<leader>t", function() require("neotest").run.run() end, desc = "Run Nearest Test" },
+      { "<leader>tf", function() require("neotest").run.run(vim.fn.expand("%")) end, desc = "Run File Tests" },
+      { "<leader>tl", function() require("neotest").run.run_last() end, desc = "Run Last Test" },
+      { "<leader>td", function() require("neotest").run.run({ strategy = "dap" }) end, desc = "Debug Nearest Test" },
+      { "<leader>to", function() require("neotest").output_panel.toggle() end, desc = "Toggle Output Panel" },
+      { "<leader>ts", function() require("neotest").summary.toggle() end, desc = "Toggle Summary Tree" },
+    },
+  },
+
+  {
+    "folke/edgy.nvim",
+    event = "VeryLazy",
+    opts = {
+      -- This defines a sidebar on the RIGHT
+      right = {
+        -- 1. The Summary Tree (Top)
+        {
+          ft = "neotest-summary",
+          title = "Tests",
+          size = { height = 0.4, width = 50},
+        },
+        -- 2. The Output Panel (Bottom)
+        {
+          ft = "neotest-output-panel",
+          title = "Output",
+          size = { height = 0.6, width = 50},
+        },
+      },
+      -- Optional: If you want to animate the window opening
+      animate = {
+        enabled = false,
+      },
+    },
+  },
+
+  {
+    "rachartier/tiny-inline-diagnostic.nvim",
+    event = "VeryLazy",
+    priority = 4097,
+    config = function()
+        require("tiny-inline-diagnostic").setup({
+          signs = {
+              left = "",
+              right = "",
+              diag = "●",
+              arrow = "    ",
+              up_arrow = "    ",
+              vertical = " │",
+              vertical_end = " └",
+          },
+          blend = {
+              factor = 0.22,
+          },
+        })
+        vim.diagnostic.config({ virtual_text = false }) -- Disable Neovim's default virtual text diagnostics
+    end,
+  },
+  {
+    "neovim/nvim-lspconfig",
+    opts = { diagnostics = { virtual_text = false } },
   },
 
   -- test new blink

@@ -195,3 +195,52 @@ map("n", "<leader>ca", vim.lsp.buf.code_action, { desc = "LSP Code Action" })
 -- Movement tweaks
 map("n", "{", "{{+", { desc = "Move up paragraph" })
 map("n", "}", "}+", { desc = "Move down paragraph" })
+
+-- ============================================================================
+--  NEW MAPPINGS (MERGED FROM YOUR REQUESTS)
+-- ============================================================================
+
+-- 1. DAP (Debugger)
+map("n", "<leader>db", "<cmd> DapToggleBreakpoint <CR>", { desc = "Add breakpoint at line" })
+map("n", "<leader>dr", "<cmd> DapContinue <CR>", { desc = "Run or continue debugger" })
+map("n", "<leader>do", "<cmd> DapStepOver <CR>", { desc = "Step over" })
+map("n", "<leader>du", "<cmd> DapStepOut <CR>", { desc = "Step out" })
+
+-- 2. DAP Go
+map("n", "<leader>dgt", function() require("dap-go").debug_test() end, { desc = "Debug go test" })
+map("n", "<leader>dgl", function() require("dap-go").debug_last() end, { desc = "Debug last go test" })
+
+-- 3. Gopher / Go Tools
+map("n", "<leader>gosj", "<cmd>GoTagAdd json<CR>", { desc = "Add json tag" })
+map("n", "<leader>gosy", "<cmd>GoTagAdd yaml<CR>", { desc = "Add yaml tag" })
+map("n", "<leader>gosv", "<cmd>GoTagAdd validate<CR>", { desc = "Add validate tag" })
+map("n", "<leader>goat", "<cmd>GoTestAdd<CR>", { desc = "Add test" })
+map("n", "<leader>gonc", "<cmd>NewConstruct<cr>", { desc = "Generate Go Constructor" })
+
+-- NOTE: <leader>ie (GoIfErr) was already in your file, so I didn't add it again.
+
+-- 4. Global Marks Logic
+for i = 97, 122 do 
+  local char = string.char(i)        -- 'a'
+  local upper = string.upper(char)   -- 'A'
+
+  map("n", "m" .. char, "m" .. upper, { desc = "Set global mark " .. upper })
+  map("n", "'" .. char, "'" .. upper, { desc = "Jump to global mark " .. upper })
+  map("n", "`" .. char, "`" .. upper, { desc = "Jump to exact mark " .. upper })
+end
+
+-- 5. Copy Diagnostic Logic
+-- Creates command :CopyDiagnostic
+vim.api.nvim_create_user_command('CopyDiagnostic', function()
+  local line_diagnostics = vim.diagnostic.get(0, { lnum = vim.fn.line('.') - 1 })
+  if vim.tbl_isempty(line_diagnostics) then
+    vim.notify("No diagnostics on this line", vim.log.levels.INFO)
+    return
+  end
+  local msg = line_diagnostics[1].message
+  vim.fn.setreg('+', msg)
+  vim.notify("Copied to clipboard: " .. msg, vim.log.levels.INFO)
+end, { desc = "Copy diagnostic message from current line to clipboard" })
+
+-- Maps <leader>cp to the new command
+map('n', '<leader>cp', '<cmd>CopyDiagnostic<cr>', { desc = "Copy Diagnostic" })
