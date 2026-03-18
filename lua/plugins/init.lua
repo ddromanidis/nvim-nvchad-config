@@ -289,21 +289,107 @@ return {
     config = function()
       require("codecompanion").setup({
         strategies = {
-          chat = { adapter = "gemini", model = "gemini-3-pro-preview" },
-          inline = { adapter = "gemini", model = "gemini-3-pro-preview" },
-          agent = { adapter = "gemini", model = "gemini-3-pro-preview" },
+          chat = { adapter = "gemini", model = "gemini-3-pro" },
+          inline = { adapter = "gemini", model = "gemini-3-pro" },
+          agent = { adapter = "gemini", model = "gemini-3-pro" },
         },
+        -- strategies = {
+        --   -- chat = { adapter = "ollama", model = "qwen" },
+        --   -- inline = { adapter = "ollama", model = "qwen" },
+        --   -- agent = { adapter = "ollama", model = "qwen" },
+        --   chat = { adapter = "opencode" , }, -- tools = { "editor", "files", },},
+        --   inline = { adapter = "opencode" },
+        --   agent = { adapter = "opencode" },
+        -- },
         adapters = {
           gemini = function()
             return require("codecompanion.adapters").extend("gemini", {
-              schema = { model = { default = "gemini-3-pro-preview" } },
+              schema = { model = { default = "gemini-3-pro" } },
               env = { api_key = os.getenv("GEMINI_API_KEY") },
+            })
+          end,
+          qwen = function()
+            return require("codecompanion.adapters").extend("ollama", {
+              name = "qwen", -- Name of the adapter
+              schema = {
+                model = { default = "qwen2.5-coder:latest", },
+                num_ctx = { default = 16384, },
+                env = { tools = false },
+              },
+            })
+          end,
+          llama = function()
+            return require("codecompanion.adapters").extend("ollama", {
+              name = "llama", -- Name of the adapter
+              schema = { model = { default = "llama3:8b", }, num_ctx = { default = 16384, }, },
+            })
+          end,
+          opencode = function()
+            return require("codecompanion.adapters").extend("opencode", {
+              name = "opencode",
+              env = { OPENAI_API_KEY = "ollama", tools = false, },
+              command = "opencode",
+              args = { "acp" }, -- Starts it in Agent Client Protocol mode
             })
           end,
         },
       })
     end,
   },
+
+  -- {
+  --   "olimorris/codecompanion.nvim",
+  --   lazy = false,
+  --   dependencies = {
+  --     "nvim-lua/plenary.nvim",
+  --     "nvim-treesitter/nvim-treesitter",
+  --   },
+  --   config = function()
+  --     require("codecompanion").setup({
+  --       -- strategies = {
+  --         --   chat = { adapter = "gemini", model = "gemini-3-pro-preview" },
+  --         --   inline = { adapter = "gemini", model = "gemini-3-pro-preview" },
+  --         --   agent = { adapter = "gemini", model = "gemini-3-pro-preview" },
+  --         -- },
+  --         -- adapters = {
+  --           --   gemini = function()
+  --             --     return require("codecompanion.adapters").extend("gemini", {
+  --               --       schema = { model = { default = "gemini-3-pro-preview" } },
+  --               --       env = { api_key = os.getenv("GEMINI_API_KEY") },
+  --               --     })
+  --               --   end,
+  --               -- },
+  --               -- 1. Tell the strategies to use the 'qwen' adapter defined below
+  --               strategies = {
+  --                 chat = { adapter = "qwen" },
+  --                 inline = { adapter = "qwen" },
+  --                 agent = { adapter = "qwen" },
+  --               },
+  --
+  --               -- 2. Define the custom adapter
+  --               adapters = {
+  --                 qwen = function()
+  --                   return require("codecompanion.adapters").extend("ollama", {
+  --                     name = "qwen", -- Name of the adapter
+  --                     schema = {
+  --                       model = {
+  --                         default = "qwen2.5-coder:latest", -- MUST match `ollama list`
+  --                       },
+  --                       -- Optional: Increase context window (default is often 2048)
+  --                       num_ctx = {
+  --                         default = 16384,
+  --                       },
+  --                       -- Optional: Speed up response by disabling streaming if preferred
+  --                       -- stream = {
+  --                         --   default = false,
+  --                         -- },
+  --                       },
+  --                     })
+  --                   end,
+  --                 },
+  --               })
+  --             end,
+  --           },
 
   {
     "NvChad/nvterm",
@@ -403,7 +489,13 @@ return {
       -- The Go Adapter
       {
         "fredrikaverpil/neotest-golang",
-        version = "*",
+        dependencies = {
+          "uga-rosa/utf8.nvim", -- required for sanitization feature
+        },
+        version = "*",  -- Optional, but recommended; track releases
+        build = function()
+          vim.system({"go", "install", "gotest.tools/gotestsum@latest"}):wait() -- Optional, but recommended
+        end,
       },
       -- Debugging Support
       "mfussenegger/nvim-dap",
@@ -420,25 +512,35 @@ return {
         adapters = {
           neotest_golang({
             -- CRITICAL FIX: Use standard "go" command to avoid the JSON error
-            runner = "go",
-            go_test_args = {
-              "-v",
-              "-race",
-              -- "-count=1",
-              -- "-timeout=60s",
-              -- "--jsonfile=" .. report_path 
+            runner = "gotestsum",
+            go_list_args = {},
+            go_test_args = { "-v", "-count=1", "-race", "-parallel=3" },
+            gotestsum_args = {
+              --"--format=standard-verbose",
             },
             -- Enable Debugging (allows you to use <leader>td)
             dap_go_enabled = true,
+            dynamic_test_discovery = {
+              enabled = true
+            },
+            log_level = 1,
+            performance_monitoring = true,
+            sanitize_output = true,
+            testify_enabled = true,
+            testify_import_identifier = "^(suite)$",
+            testify_operand = "^(s|suite)$",
+            warn_test_name_dupes = true
           }),
         },
 
         -- UI Configuration
         output = {
+          enabled = true,
           open_on_run = true, -- Auto-open output on failure
           enter = true,       -- Auto-focus the output window
         },
         status = {
+          enabled = true,
           virtual_text = true, -- Show "Failed" text next to code
           signs = true,        -- Show Red/Green dots in gutter
         },
@@ -446,12 +548,13 @@ return {
     end,
     -- Keymaps for TDD
     keys = {
-      { "<leader>t", function() require("neotest").run.run() end, desc = "Run Nearest Test" },
+      -- { "<leader>t", function() require("neotest").run.run() end, desc = "Run Nearest Test" },
       { "<leader>tf", function() require("neotest").run.run(vim.fn.expand("%")) end, desc = "Run File Tests" },
       { "<leader>tl", function() require("neotest").run.run_last() end, desc = "Run Last Test" },
       { "<leader>td", function() require("neotest").run.run({ strategy = "dap" }) end, desc = "Debug Nearest Test" },
       { "<leader>to", function() require("neotest").output_panel.toggle() end, desc = "Toggle Output Panel" },
       { "<leader>ts", function() require("neotest").summary.toggle() end, desc = "Toggle Summary Tree" },
+      { "<leader>tt", function() require("neotest").summary.toggle(); require("neotest").output_panel.toggle() end, desc = "Toggle Summary Tree And Output Panel" },
     },
   },
 
@@ -486,21 +589,21 @@ return {
     event = "VeryLazy",
     priority = 4097,
     config = function()
-        require("tiny-inline-diagnostic").setup({
-          signs = {
-              left = "",
-              right = "",
-              diag = "●",
-              arrow = "    ",
-              up_arrow = "    ",
-              vertical = " │",
-              vertical_end = " └",
-          },
-          blend = {
-              factor = 0.22,
-          },
-        })
-        vim.diagnostic.config({ virtual_text = false }) -- Disable Neovim's default virtual text diagnostics
+      require("tiny-inline-diagnostic").setup({
+        signs = {
+          left = "",
+          right = "",
+          diag = "●",
+          arrow = "    ",
+          up_arrow = "    ",
+          vertical = " │",
+          vertical_end = " └",
+        },
+        blend = {
+          factor = 0.22,
+        },
+      })
+      vim.diagnostic.config({ virtual_text = false }) -- Disable Neovim's default virtual text diagnostics
     end,
   },
   {
@@ -512,12 +615,12 @@ return {
   -- { import = "nvchad.blink.lazyspec" },
 
   -- {
-  -- 	"nvim-treesitter/nvim-treesitter",
-  -- 	opts = {
-  -- 		ensure_installed = {
-  -- 			"vim", "lua", "vimdoc",
-  --      "html", "css"
-  -- 		},
-  -- 	},
-  -- },
-}
+    -- 	"nvim-treesitter/nvim-treesitter",
+    -- 	opts = {
+      -- 		ensure_installed = {
+        -- 			"vim", "lua", "vimdoc",
+        --      "html", "css"
+        -- 		},
+        -- 	},
+        -- },
+      }
